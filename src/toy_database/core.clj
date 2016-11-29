@@ -1,6 +1,5 @@
 (ns toy-database.core
-  (:refer-clojure :exclude [or and])
-  (:require [clojure.pprint]))
+  (:refer-clojure :exclude [or and]))
 
 (def db (atom {}))
 
@@ -9,47 +8,36 @@
   [table-name record]
   (swap! db update-in [table-name] conj record))
 
-
-(defmacro defpred
-  [name args pred-fn]
+(defmacro def-filter
+  [name args-vec pred-body]
   `(defn ~name
-     ~args
-     (fn[~'%]
-       ~pred-fn)))
+     ~args-vec
+     (fn [~'%]
+       ~pred-body)))
 
-;; standard predicates
-(defn eq
-  [attr-name attr-val]
-  (fn[r]
-    (= (attr-name r) attr-val)))
+(def-filter eq
+  [attr val]
+  (= (attr %) val))
 
-(defn not-eq
-  [attr-name attr-val]
-  (comp not (eq attr-name attr-val)))
+(def-filter gt
+  [attr val]
+  (pos? (compare (attr %) val)))
 
-(defn bw
-  [attr-name start end]
-  (fn[r]
-    (<= start (attr-name r) end)))
-
-(defn and
+(def-filter and
   [& preds]
-  (apply every-pred (flatten preds)))
+  ((apply every-pred preds) %))
 
-(defn or
+(def-filter or
   [& preds]
-  (apply some-fn (flatten preds)))
-
+  ((apply some-fn preds) %))
 
 (defn where
-
-
-  [& preds]
-  (fn[r] ((and preds) r)))
+  [pred]
+  pred)
 
 (defn select
-  [table selector-fn]
-  (filter selector-fn
+  [table filter-pred]
+  (filter filter-pred
           (table @db)))
 
 
@@ -59,63 +47,28 @@
   
   @db
 
-  (insert-into :projects {:name "mGage" :programmers 2})
-  (insert-into :projects {:name "Aconex" :programmers 4})
-  (insert-into :projects {:name "GoodKarma" :programmers 3})
-  (insert-into :projects {:name "intersect" :programmers 3})
-
-  ;; Manually select records from the database using clojure collection related functions
+  (insert-into :songs {:title "Roses" :artist "Kathy Mattea" :rating 7})
+  (insert-into :songs {:title "Fly" :artist "Dixie Chicks" :rating 8})
+  (insert-into :songs {:title "Home" :artist "Dixie Chicks" :rating 9})
+  (insert-into :songs {:title "Home" :artist "Dixie Chicks" :rating 9})  
   
-  (insert-into :table-1 {:attribute "value" :the-one true})
 
-  (select :table-1
-          (where (eq :attribute "value")
-                 (eq :the-one true)))
+  (select :songs (where (eq :title "Roses")))
 
-  ;; This seems nice but not very flexible the users might want to combine predicates in other ways. If we look at this very closely and predicate combiner is no different from normal predicates except for the fact that they take other predicates as argument. Can we define them just the way we defined eq
+  (select :songs (eq :title "Roses"))
 
-  (select :projects
-          (where (and
-                  (eq :name "mGage")
-                  (eq :programmers 2))))
+  (select :songs (where (gt :rating 8)))
 
-  ;; Now this does not seem to be working because union is expecting an array of preds
-  ;; We will need to modify union to accept either an array of preds or a variable
-  ;; number of predicates
-
-  (select :projects (where (or
-                            (eq :name "mGage")
-                            (eq :programmers 3 ))))
+  (macroexpand '(def-filter eq
+                  [attr val]
+                  (= (attr-name record) attr-val)))
 
 
-  ;; Let's try some more predicates, now that we have eq we should perhaps create not-eq.
+ (select :songs (where (or (eq :artist "Dixie Chicks")
+                             (gt :rating 6))))
 
-  (select :projects
-          (where (or (eq :name "mGage")
-                     (bw :programmers 2 4 ))))
-
-
-  ;; Let's create a new predicate called between. This will test if an attribute value is between two values
-
-  ;; creating new predicates is becoming a pain now because we have to deal with all the details about partial function et el. Let's try to clean this up.
-
-
-  (macroexpand '(defpred a-eq
-                  [attr-name attr-val]
-                  (= (attr-name %) attr-val)))
-
-
-  (defpred a-eq
-    [attr-name attr-val]
-    (= (attr-name %) attr-val))
-
-
-  (select :projects
-          (where (or (a-eq :name "mGage")
-                     (bw :programmers 2 4 ))))
-
-
-  ;; At this point we can create fairly useful select queris. We can still implement functionailty to select only a selected attributes and also support for aggregate functions that will come in the second part
-  )
+  
+  
+)
 
 
